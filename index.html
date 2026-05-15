@@ -32,8 +32,6 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 .btn{display:block;width:100%;margin-top:14px;padding:13px;background:var(--green);color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;transition:background 0.15s}
 .btn:hover{background:var(--green-dark)}
 .btn:disabled{background:#9bd6c2;cursor:not-allowed}
-.btn-ghost{background:none;color:var(--green);border:1px solid var(--green);font-weight:600;padding:9px 14px;border-radius:9px;font-size:13px;cursor:pointer;font-family:inherit}
-.btn-ghost:hover{background:var(--green-light)}
 
 .error-msg{margin-top:14px;padding:12px 14px;background:var(--red-light);color:var(--red);border-radius:10px;font-size:13px;text-align:center;display:none}
 .error-msg.show{display:block}
@@ -49,7 +47,6 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 .sc-key{font-size:11px;color:var(--green-dark);font-weight:700;letter-spacing:0.5px;min-width:60px;padding-top:1px}
 .sc-val{font-size:14px;font-weight:600;text-align:right;flex:1;word-break:break-word}
 .sc-nama{font-size:16px;font-weight:700;color:var(--green-dark);margin-bottom:4px}
-.sc-actions{margin-top:14px;text-align:right}
 
 /* YEAR SELECTOR */
 .year-row{display:flex;align-items:center;gap:10px;margin-bottom:12px}
@@ -65,6 +62,17 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 .stat-num.red{color:var(--red)}
 .stat-num.blue{color:#185FA5}
 .stat-label{font-size:10px;color:var(--text2);margin-top:2px;letter-spacing:0.3px}
+
+/* PROGRESS PIE */
+.progress-section{display:none;align-items:center;gap:14px;padding:14px;margin-bottom:12px;background:linear-gradient(135deg,var(--green-light) 0%,#f7fcfa 100%);border:1px solid #c5e8da;border-radius:12px}
+.progress-section.show{display:flex}
+.pie{--p:0;width:84px;height:84px;border-radius:50%;background:conic-gradient(var(--green) calc(var(--p)*1%),#e4ebe7 calc(var(--p)*1%) 100%);display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 2px 6px rgba(29,158,117,0.15)}
+.pie-inner{width:62px;height:62px;background:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center}
+.pie-num{font-size:16px;font-weight:700;color:var(--green-dark)}
+.progress-info{flex:1;min-width:0}
+.progress-title{font-size:13px;font-weight:700;color:var(--green-dark);margin-bottom:4px;line-height:1.25}
+.progress-detail{font-size:13px;color:var(--text);margin-bottom:6px;font-weight:500}
+.progress-note{font-size:11px;color:var(--text2);background:#fff;padding:3px 8px;border-radius:6px;display:inline-block;font-weight:600;letter-spacing:0.3px;border:1px solid var(--border)}
 
 /* MONTH LIST */
 .month-title{font-size:13px;font-weight:700;color:var(--text2);margin-bottom:10px;letter-spacing:0.3px;text-transform:uppercase}
@@ -146,6 +154,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
           <span class="field-label">PILIH TAHUN</span>
           <select class="year-select" id="year-select" onchange="renderMonths()"></select>
         </div>
+        <div class="progress-section" id="progress-section"></div>
         <div class="stats-bar" id="stats-bar"></div>
         <div class="month-title" id="month-title">Status Sumbangan</div>
         <div class="month-list" id="month-list"></div>
@@ -275,9 +284,6 @@ function showResults() {
     <div class="sc-row">
       <span class="sc-key">KELAS</span>
       <span class="sc-val">${foundStudent.kelas}</span>
-    </div>
-    <div class="sc-actions">
-      <button class="btn-ghost" onclick="resetSearch()">🔄 Cari Murid Lain</button>
     </div>`;
 
   const years = new Set();
@@ -343,16 +349,47 @@ function renderMonths() {
     <div class="stat-pill"><div class="stat-num green">${paidCount}</div><div class="stat-label">DIBAYAR</div></div>
     <div class="stat-pill"><div class="stat-num red">${totalShown - paidCount}</div><div class="stat-label">BELUM</div></div>
     <div class="stat-pill"><div class="stat-num blue">RM ${totalRM}</div><div class="stat-label">JUMLAH</div></div>`;
-}
 
-// ===== RESET / CARI LAIN =====
-function resetSearch() {
-  foundStudent = null;
-  studentPayments = {};
-  document.getElementById('results').style.display = 'none';
-  document.getElementById('ic-input').value = '';
-  document.getElementById('err-msg').classList.remove('show');
-  document.getElementById('ic-input').focus();
+  // Carta pai kemajuan sumbangan (hanya untuk 2026):
+  // peratus = bulan dibayar setakat ini ÷ bulan sepatutnya (Mei → bulan semasa)
+  const progressSection = document.getElementById('progress-section');
+  if (year === 2026) {
+    const today = new Date();
+    const ty = today.getFullYear(), tm = today.getMonth();
+    let expectedMonths;
+    if (ty > 2026) expectedMonths = 8;          // tahun lalu — penuh Mei-Dis
+    else if (ty < 2026) expectedMonths = 0;     // tahun akan datang
+    else expectedMonths = Math.max(0, tm - 3);  // Mei=4 → 1, Jul=6 → 3
+
+    let paidUpToNow = 0;
+    for (let i = 4; i < 4 + expectedMonths; i++) {
+      const mk = `${year}-${String(i + 1).padStart(2, '0')}`;
+      if (studentPayments[mk]) paidUpToNow++;
+    }
+
+    const percent = expectedMonths > 0
+      ? Math.min(100, Math.round((paidUpToNow / expectedMonths) * 100))
+      : 0;
+
+    let title;
+    if (expectedMonths === 0) title = 'Pembayaran belum bermula';
+    else if (paidUpToNow >= expectedMonths) title = 'Sumbangan lengkap setakat ini ✓';
+    else title = 'Sumbangan setakat ini';
+
+    progressSection.innerHTML = `
+      <div class="pie" style="--p:${percent}">
+        <div class="pie-inner"><div class="pie-num">${percent}%</div></div>
+      </div>
+      <div class="progress-info">
+        <div class="progress-title">${title}</div>
+        <div class="progress-detail">${paidUpToNow} daripada ${expectedMonths} bulan</div>
+        <div class="progress-note">RM5 sebulan</div>
+      </div>`;
+    progressSection.classList.add('show');
+  } else {
+    progressSection.classList.remove('show');
+    progressSection.innerHTML = '';
+  }
 }
 
 // ===== RECEIPT =====
